@@ -1,6 +1,8 @@
 __pycache__
 .vscode/
 
+app/node_modules
+
 .env
 
 *.log

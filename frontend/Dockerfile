@@ -1,12 +1,3 @@
-# FROM node:16.1.0-alpine
-
-# WORKDIR /app
-
-# RUN npm install --legacy-peer-deps --registry=https://registry.npm.taobao.org
-
-# COPY entrypoint.sh /entrypoint.sh
-# ENTRYPOINT [ "/entrypoint.sh" ]
-
 FROM node:lts as build
 
 WORKDIR /app
