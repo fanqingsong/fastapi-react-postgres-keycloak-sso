@@ -4,6 +4,10 @@ To launch all the services just execute:
 
 ```bash
 docker-compose up -d
+
+or
+
+docker-compose down && docker-compose build && docker-compose up
 ```
 
 ## Keycloak installation
