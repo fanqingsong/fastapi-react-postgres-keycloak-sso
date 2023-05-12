@@ -1,6 +1,8 @@
 fastapi==0.64.0
 uvicorn==0.13.4
 python-keycloak==0.24.0
+requests==2.20.0
+urllib3==1.21.1
 python-multipart==0.0.5
 simber==0.2.1
 SQLAlchemy==1.4.14

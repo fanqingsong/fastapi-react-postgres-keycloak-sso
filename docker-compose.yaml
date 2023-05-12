@@ -29,16 +29,17 @@ services:
       - ./logs/backend:/logs
     depends_on:
       - postgres
+      - keycloak
 
   frontend:
     container_name: frontend
     build:
       context: frontend
       dockerfile: Dockerfile
-    volumes:
-      - ./frontend/app:/app
+    # volumes:
+    #   - ./frontend/app:/app
     ports:
-      - 3000:3000
+      - 8000:8000
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
