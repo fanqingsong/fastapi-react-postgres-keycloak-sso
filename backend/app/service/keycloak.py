@@ -8,7 +8,11 @@ from jose.exceptions import JWTError
 from keycloak.exceptions import KeycloakAuthenticationError, KeycloakGetError
 from keycloak.keycloak_openid import KeycloakOpenID
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+REALM = 'master'
+KEYCLOAK_BASEURL = f'http://localhost:8080/auth/realms' \
+                   f'/{REALM}/protocol/openid-connect'
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{KEYCLOAK_BASEURL}/token")
 
 keycloak_openid = KeycloakOpenID(
     server_url=os.environ.get("KEYCLOAK_SERVER_URL"),
