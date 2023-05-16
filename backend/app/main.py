@@ -90,5 +90,11 @@ def company_admin(user = Depends(verify_permission(required_roles=["admin"]))):
     return f'Hi admin {user}'
 
 
+@app.get("/protected", dependencies=[Depends(verify_permission(required_roles=["admin"]))])  # Requires the admin role
+def company_admin():
+    return f'Hi, this is protected path'
+
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", reload=True, port=8888)  # nosec
