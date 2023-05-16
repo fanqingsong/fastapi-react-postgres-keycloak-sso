@@ -4,9 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from simber import Logger
 import uvicorn
+import os
 
 from app.router import auth, targets
 from app.service.keycloak import verify_token
+from app.service.keycloak import verify_permission
+
+
+from fastapi_keycloak import FastAPIKeycloak, OIDCUser
+
 
 LOG_FORMAT = "{levelname} [{filename}:{lineno}]:"
 logger = Logger(__name__, log_path="/logs/api.log")
@@ -24,6 +30,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# idp = FastAPIKeycloak(
+#     # server_url=os.environ.get("KEYCLOAK_SERVER_URL"),
+#     server_url="http://keycloak:8080/auth",
+#     client_id=os.environ.get("KEYCLOAK_CLIENT_ID"),
+#     client_secret=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY"),
+#     admin_client_secret="065a7a30-9019-4718-a017-697835cf5a20",
+#     realm=os.environ.get("KEYCLOAK_REALM_NAME"),
+#     callback_uri="http://localhost:8888/callback"
+# )
+
+# idp.add_swagger_config(app)
+
+
+
 
 
 @app.exception_handler(Exception)
@@ -58,6 +79,16 @@ app.include_router(
     prefix="/api/auth", 
     tags=["auth"])
     
+
+@app.get("/user")  # Requires logged in
+def current_users(user = Depends(verify_token)):
+    return user
+
+
+@app.get("/admin")  # Requires the admin role
+def company_admin(user = Depends(verify_permission(required_roles=["admin"]))):
+    return f'Hi admin {user}'
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", reload=True, port=8888)  # nosec
