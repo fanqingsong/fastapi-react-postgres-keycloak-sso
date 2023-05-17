@@ -10,6 +10,7 @@ or
 docker-compose down && docker-compose build && docker-compose up
 ```
 
+
 ## Keycloak installation
 
 Create a `.env` file based on the `.env.example` file.
