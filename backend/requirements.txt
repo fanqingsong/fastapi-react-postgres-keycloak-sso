@@ -7,7 +7,7 @@ python-multipart==0.0.5
 simber==0.2.1
 SQLAlchemy==1.4.14
 pydantic==1.8.2
-psycopg2==2.8.6
+psycopg2-binary==2.8.6
 alembic==1.6.2
 faker==8.1.2
 fastapi_keycloak==1.0.0

@@ -1,12 +1,19 @@
-FROM node:lts as build
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/node:16 as build
 
 WORKDIR /app
 
+# 设置npm镜像源为更快的国内源
+RUN npm config set registry https://registry.npmmirror.com/
+RUN npm config set cache /tmp/npm-cache
+
+COPY ./app/package*.json ./
+RUN npm ci --legacy-peer-deps --cache /tmp/npm-cache
+
 COPY ./app/ /app
-RUN npm install --legacy-peer-deps --registry=https://registry.npm.taobao.org
+
 RUN npm run build
 
-FROM nginx
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:latest
 
 COPY ./nginx.conf /etc/nginx/conf.d/angular.conf
 COPY --from=build /app/build /usr/share/nginx/html
