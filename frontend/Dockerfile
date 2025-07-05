@@ -13,7 +13,7 @@ COPY ./app/ /app
 
 RUN npm run build
 
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:latest
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:1.25.3
 
 COPY ./nginx.conf /etc/nginx/conf.d/angular.conf
 COPY --from=build /app/build /usr/share/nginx/html

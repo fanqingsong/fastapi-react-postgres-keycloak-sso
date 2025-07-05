@@ -3,7 +3,7 @@ version: "3"
 services:
   nginx:
     container_name: fastapi_sso_nginx
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx@sha256:596c783ac62b9a43c60edb876fe807376cd5022a4e25e89b9a9ae06c374299d4
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/nginx:1.25.3
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./logs/nginx:/var/log/nginx
@@ -45,7 +45,7 @@ services:
 
   keycloak:
     container_name: fastapi_sso_keycloak
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/quay.io/keycloak/keycloak@sha256:23d90f885fac31140b602b2368d72649750384623d5c8362f389ca18267909d0
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/quay.io/keycloak/keycloak:25.0
     command: start-dev
     environment:
       KC_DB: postgres
@@ -61,7 +61,7 @@ services:
 
   postgres:
     container_name: fastapi_sso_postgres
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres@sha256:e7535db1bbaabb3d6f1ecb2df7fabe8e084a0db79d049dcf4dc7dad5eaa4c410
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:latest
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -73,7 +73,7 @@ services:
 
   keycloak_postgres:
     container_name: fastapi_sso_keycloak_postgres
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres@sha256:e7535db1bbaabb3d6f1ecb2df7fabe8e084a0db79d049dcf4dc7dad5eaa4c410
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:latest
     volumes:
       - keycloak_postgres_data:/var/lib/postgresql/data
     environment:
