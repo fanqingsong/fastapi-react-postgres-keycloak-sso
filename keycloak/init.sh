@@ -7,7 +7,7 @@ echo "Getting admin access token"
 echo "=========================="
 
 ADMIN_TOKEN=$(curl -s -X POST \
-"http://$KEYCLOAK_URL/auth/realms/master/protocol/openid-connect/token" \
+"http://$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "username=admin" \
 -d 'password=admin' \
@@ -20,7 +20,7 @@ echo
 echo "Creating client"
 echo "==============="
 
-CLIENT_ID=$(curl -si -X POST "http://$KEYCLOAK_URL/auth/admin/realms/master/clients" \
+CLIENT_ID=$(curl -si -X POST "http://$KEYCLOAK_URL/admin/realms/master/clients" \
 -H "Authorization: Bearer $ADMIN_TOKEN" \
 -H "Content-Type: application/json" \
 -d '
@@ -38,7 +38,7 @@ echo
 echo "Getting client secret"
 echo "====================="
 
-SIMPLE_SERVICE_CLIENT_SECRET=$(curl -s "http://$KEYCLOAK_URL/auth/admin/realms/master/clients/$CLIENT_ID/client-secret" \
+SIMPLE_SERVICE_CLIENT_SECRET=$(curl -s "http://$KEYCLOAK_URL/admin/realms/master/clients/$CLIENT_ID/client-secret" \
 -H "Authorization: Bearer $ADMIN_TOKEN" \
 | jq -r '.value')
 
@@ -49,7 +49,7 @@ echo
 echo "Creating new user"
 echo "====================="
 
-curl -i -X POST "http://$KEYCLOAK_URL/auth/admin/realms/master/users" \
+curl -i -X POST "http://$KEYCLOAK_URL/admin/realms/master/users" \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer $ADMIN_TOKEN" \
 -d '{

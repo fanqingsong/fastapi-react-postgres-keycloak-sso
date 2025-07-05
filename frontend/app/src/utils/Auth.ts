@@ -86,13 +86,17 @@ export const checkAccessToken = async () => {
 };
 
 export const getTokens = async (username: string, password: string) => {
-  let formData = new FormData();
-  formData.append("username", username);
-  formData.append("password", password);
+  const params = new URLSearchParams();
+  params.append("username", username);
+  params.append("password", password);
+  params.append("grant_type", "password");
 
   const response = await fetch("/api/auth/token", {
     method: "POST",
-    body: formData,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: params.toString()
   });
   if (response.status >= 400) {
     const error = await response.json();

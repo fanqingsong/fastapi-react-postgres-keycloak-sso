@@ -11,7 +11,7 @@ from keycloak.keycloak_openid import KeycloakOpenID
 
 
 REALM = 'master'
-KEYCLOAK_BASEURL = f'http://localhost:8080/auth/realms' \
+KEYCLOAK_BASEURL = f'http://localhost:8080/realms' \
                    f'/{REALM}/protocol/openid-connect'
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{KEYCLOAK_BASEURL}/token")
