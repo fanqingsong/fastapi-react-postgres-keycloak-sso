@@ -49,7 +49,7 @@ async def oidc_login():
     # 生成随机state参数
     state = secrets.token_urlsafe(32)
     # 构建OIDC授权URL
-    auth_url = f"{os.environ.get('KEYCLOAK_SERVER_URL_CLIENT', 'http://localhost:8080/')}/realms/{os.environ.get('KEYCLOAK_REALM_NAME', 'master')}/protocol/openid-connect/auth"
+    auth_url = f"{os.environ.get('KEYCLOAK_SERVER_URL_CLIENT', 'http://localhost:8080/')}realms/{os.environ.get('KEYCLOAK_REALM_NAME', 'master')}/protocol/openid-connect/auth"
     params = {
         'client_id': os.environ.get('KEYCLOAK_CLIENT_ID', 'fastapi-client'),
         'response_type': 'code',
