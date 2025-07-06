@@ -64,8 +64,8 @@ async def oidc_login():
 async def oidc_callback(code: str, state: str = None):
     """处理OIDC回调"""
     try:
-        # 使用keycloak.py暴露的authenticate_user方法换token
-        from app.service.keycloak import keycloak_openid
+        from app.service.keycloak import get_keycloak_openid
+        keycloak_openid = get_keycloak_openid()
         token_data = keycloak_openid.token(
             grant_type='authorization_code',
             code=code,
