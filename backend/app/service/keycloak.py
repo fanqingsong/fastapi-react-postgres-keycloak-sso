@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose.exceptions import JWTError
-from keycloak.exceptions import KeycloakAuthenticationError, KeycloakGetError
+from keycloak.exceptions import KeycloakAuthenticationError, KeycloakGetError, KeycloakConnectionError
 from keycloak.keycloak_openid import KeycloakOpenID
 
 
@@ -16,18 +16,35 @@ KEYCLOAK_BASEURL = f'http://localhost:8080/realms' \
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{KEYCLOAK_BASEURL}/token")
 
-keycloak_openid = KeycloakOpenID(
-    server_url=os.environ.get("KEYCLOAK_SERVER_URL"),
-    realm_name=os.environ.get("KEYCLOAK_REALM_NAME"),
-    client_id=os.environ.get("KEYCLOAK_CLIENT_ID"),
-    client_secret_key=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY"),
-)
+# 延迟初始化Keycloak客户端
+keycloak_openid = None
+KEYCLOAK_PUBLIC_KEY = None
 
-KEYCLOAK_PUBLIC_KEY = (
-    "-----BEGIN PUBLIC KEY-----\n"
-    f"{keycloak_openid.public_key()}"
-    "\n-----END PUBLIC KEY-----"
-)
+def _init_keycloak():
+    """初始化Keycloak客户端"""
+    global keycloak_openid, KEYCLOAK_PUBLIC_KEY
+    try:
+        keycloak_openid = KeycloakOpenID(
+            server_url=os.environ.get("KEYCLOAK_SERVER_URL"),
+            realm_name=os.environ.get("KEYCLOAK_REALM_NAME"),
+            client_id=os.environ.get("KEYCLOAK_CLIENT_ID"),
+            client_secret_key=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY"),
+        )
+        KEYCLOAK_PUBLIC_KEY = (
+            "-----BEGIN PUBLIC KEY-----\n"
+            f"{keycloak_openid.public_key()}"
+            "\n-----END PUBLIC KEY-----"
+        )
+        return True
+    except (KeycloakConnectionError, Exception) as e:
+        print(f"Warning: Keycloak initialization failed: {e}")
+        return False
+
+def _ensure_keycloak_initialized():
+    """确保Keycloak已初始化"""
+    if keycloak_openid is None:
+        if not _init_keycloak():
+            raise HTTPException(status_code=503, detail="Keycloak service unavailable")
 
 
 async def authenticate_user(username: str, password: str) -> tp.Dict[str, str]:
@@ -40,6 +57,7 @@ async def authenticate_user(username: str, password: str) -> tp.Dict[str, str]:
     Returns:
         Access token and refresh token with their expiration time
     """
+    _ensure_keycloak_initialized()
     try:
         return keycloak_openid.token(username, password)
     except KeycloakAuthenticationError as error:
@@ -57,6 +75,7 @@ def verify_permission(required_roles=[]):
         Returns:
             Token decoded
         """
+        _ensure_keycloak_initialized()
         try:
             token_info = keycloak_openid.decode_token(
                 token,
@@ -97,6 +116,7 @@ async def verify_token(token: str = Depends(oauth2_scheme)) -> tp.Dict[str, str]
     Returns:
         Token decoded
     """
+    _ensure_keycloak_initialized()
     try:
         return keycloak_openid.decode_token(
             token,
@@ -110,6 +130,7 @@ async def verify_token(token: str = Depends(oauth2_scheme)) -> tp.Dict[str, str]
 
 
 async def refresh_token(token: str) -> tp.Dict[str, str]:
+    _ensure_keycloak_initialized()
     try:
         return keycloak_openid.refresh_token(token)
     except (KeycloakGetError) as error:
@@ -117,6 +138,7 @@ async def refresh_token(token: str) -> tp.Dict[str, str]:
 
 
 async def logout(token: str) -> tp.Dict[str, str]:
+    _ensure_keycloak_initialized()
     try:
         return keycloak_openid.logout(token)
     except (KeycloakGetError) as error:
