@@ -11,16 +11,18 @@ import {
 import { useHistory } from "react-router";
 
 import { AuthContext } from "../../App";
-import { getTokens, startOIDCLogin } from "../../utils/Auth";
+import { authService } from "../../utils/Auth";
+import OIDCLogin from "./OIDCLogin";
 
 export const Login = (props: any) => {
-  const from = props.location.state?.from.pathname;
+  const from = props.location.state?.from?.pathname || "/";
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [disabled, setDisabled] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const history = useHistory();
   const { setAuthenticated } = useContext(AuthContext);
-  const [error, setError] = useState<any>(undefined);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Login";
@@ -31,20 +33,29 @@ export const Login = (props: any) => {
     }
   }, [username, password]);
 
-  const handleClick = async (e: React.MouseEvent) => {
+  const handlePasswordLogin = async (e: React.MouseEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    
     try {
-      await getTokens(username, password);
+      await authService.login(username, password);
       setAuthenticated(true);
-      history.push(from ?? "/");
-    } catch (err) {
-      setError(err);
+      history.push(from);
+    } catch (err: any) {
+      setError(err.message || '登录失败，请检查用户名和密码');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleOIDCLogin = (e: React.MouseEvent) => {
-    e.preventDefault();
-    startOIDCLogin();
+  const handleOIDCLoginSuccess = () => {
+    setAuthenticated(true);
+    history.push(from);
+  };
+
+  const handleOIDCLoginError = (errorMsg: string) => {
+    setError(errorMsg);
   };
 
   return (
@@ -52,32 +63,44 @@ export const Login = (props: any) => {
       <Row>
         <Col>
           <Jumbotron>
-            <h1>Login</h1>
+            <h1>登录</h1>
             <Form>
               <Form.Group>
-                <Form.Label>Username</Form.Label>
+                <Form.Label>用户名</Form.Label>
                 <Form.Control
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  disabled={isLoading}
                 />
               </Form.Group>
               <Form.Group>
-                <Form.Label>Password</Form.Label>
+                <Form.Label>密码</Form.Label>
                 <Form.Control
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
                 />
               </Form.Group>
               {error && <Alert variant="warning">{error}</Alert>}
-              <Button disabled={disabled} onClick={handleClick} type="submit" className="mr-2">
-                Login with Password
-              </Button>
-              <Button variant="primary" onClick={handleOIDCLogin} type="button">
-                Login with SSO (OIDC)
+              <Button 
+                disabled={disabled || isLoading} 
+                onClick={handlePasswordLogin} 
+                type="submit" 
+                className="mr-2"
+              >
+                {isLoading ? '登录中...' : '密码登录'}
               </Button>
             </Form>
+            
+            <hr className="my-4" />
+            
+            <h5>或者使用单点登录</h5>
+            <OIDCLogin 
+              onLoginSuccess={handleOIDCLoginSuccess}
+              onLoginError={handleOIDCLoginError}
+            />
           </Jumbotron>
         </Col>
       </Row>

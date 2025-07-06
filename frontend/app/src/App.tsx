@@ -1,11 +1,11 @@
-import React, { createContext, FC, useState } from "react";
+import React, { createContext, FC, useState, useEffect } from "react";
 import { BrowserRouter, Redirect, Route, Switch } from "react-router-dom";
 
 import { Home, NavigationBar, Login } from "./components/public";
-import { OIDCCallback } from "./components/public/OIDCCallback";
+import OIDCCallback from "./components/public/OIDCCallback";
 import { TargetInfo, TargetSearch, TargetCreate } from "./components/private";
 import { PrivateRoute } from "./PrivateRoute";
-import { isAuthenticated, peridodicRefreshTokenCheck } from "./utils/Auth";
+import { authService } from "./utils/Auth";
 
 export const AuthContext = createContext({
   authenticated: false,
@@ -13,11 +13,30 @@ export const AuthContext = createContext({
 });
 
 export const App: FC = () => {
-  const [authenticated, setAuthenticated] = useState<boolean>(
-    isAuthenticated()
-  );
+  const [authenticated, setAuthenticated] = useState<boolean>(false);
 
-  peridodicRefreshTokenCheck(60);
+  // 检查初始认证状态
+  useEffect(() => {
+    const checkAuth = () => {
+      const isAuth = authService.isAuthenticated();
+      setAuthenticated(isAuth);
+    };
+    
+    checkAuth();
+    
+    // 设置定期检查token有效性
+    const interval = setInterval(async () => {
+      try {
+        await authService.ensureValidToken();
+        checkAuth();
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+        setAuthenticated(false);
+      }
+    }, 60000); // 每分钟检查一次
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ authenticated, setAuthenticated }}>

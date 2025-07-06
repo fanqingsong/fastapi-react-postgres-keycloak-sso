@@ -1,85 +1,109 @@
-import React, { useContext, useEffect, useState } from "react";
-import { useHistory, useLocation } from "react-router";
-import { Container, Row, Col, Alert, Spinner, Button } from "react-bootstrap";
-import { AuthContext } from "../../App";
-import { handleOIDCCallback } from "../../utils/Auth";
+import React, { useEffect, useState, useContext } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
+import { authService } from '../../utils/Auth';
+import { AuthContext } from '../../App';
 
-export const OIDCCallback = () => {
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+const OIDCCallback: React.FC = () => {
   const history = useHistory();
   const location = useLocation();
   const { setAuthenticated } = useContext(AuthContext);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(true);
 
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // 从URL参数中获取授权码
-        const urlParams = new URLSearchParams(location.search);
-        const code = urlParams.get("code");
-        const error = urlParams.get("error");
+        // 解析URL参数
+        const searchParams = new URLSearchParams(location.search);
+        const code = searchParams.get('code');
+        const state = searchParams.get('state');
+        const savedState = localStorage.getItem('oidc_state');
+        const errorParam = searchParams.get('error');
 
-        if (error) {
-          setError(`OIDC authentication failed: ${error}`);
-          setLoading(false);
+        // 清除保存的state
+        localStorage.removeItem('oidc_state');
+
+        // 检查是否有错误
+        if (errorParam) {
+          setError(`OIDC登录失败: ${errorParam}`);
+          setIsProcessing(false);
           return;
         }
 
-        if (!code) {
-          setError("No authorization code received");
-          setLoading(false);
+        // 检查必要参数
+        if (!code || !state) {
+          setError('缺少必要的认证参数');
+          setIsProcessing(false);
+          return;
+        }
+
+        // 验证state参数
+        if (state !== savedState) {
+          setError('State参数验证失败');
+          setIsProcessing(false);
           return;
         }
 
         // 处理OIDC回调
-        await handleOIDCCallback(code);
-        setAuthenticated(true);
-        
-        // 重定向到主页或之前的页面
-        history.push("/");
+        await authService.oidcCallback(code, state);
+        setAuthenticated(true); // 主动设置登录状态
+        // 登录成功，跳转到主页
+        history.push('/');
       } catch (err) {
-        console.error("OIDC callback error:", err);
-        setError(err instanceof Error ? err.message : "OIDC authentication failed");
-        setLoading(false);
+        console.error('OIDC callback error:', err);
+        setError('OIDC认证失败，请重试');
+      } finally {
+        setIsProcessing(false);
       }
     };
 
     handleCallback();
-  }, [history, location, setAuthenticated]);
+  }, [location, history, setAuthenticated]);
 
-  if (loading) {
+  if (isProcessing) {
     return (
-      <Container>
-        <Row className="justify-content-center">
-          <Col md={6} className="text-center">
-            <Spinner animation="border" role="status">
-              <span className="sr-only">Loading...</span>
-            </Spinner>
-            <p className="mt-3">Processing OIDC authentication...</p>
-          </Col>
-        </Row>
-      </Container>
+      <div className="container mt-5">
+        <div className="row justify-content-center">
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-body text-center">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                <p className="mt-3">正在处理OIDC认证...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Container>
-        <Row className="justify-content-center">
-          <Col md={6}>
-            <Alert variant="danger">
-              <Alert.Heading>Authentication Error</Alert.Heading>
-              <p>{error}</p>
-              <hr />
-              <Button variant="outline-danger" onClick={() => history.push("/login")}>
-                Back to Login
-              </Button>
-            </Alert>
-          </Col>
-        </Row>
-      </Container>
+      <div className="container mt-5">
+        <div className="row justify-content-center">
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-body text-center">
+                <div className="alert alert-danger" role="alert">
+                  {error}
+                </div>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => history.push('/login')}
+                >
+                  返回登录页面
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return null;
-}; 
+};
+
+export default OIDCCallback; 

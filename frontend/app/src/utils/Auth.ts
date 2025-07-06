@@ -1,211 +1,230 @@
-export const isAuthenticated = () => {
-  return localStorage.getItem("access_token") !== null;
-};
+// Auth.ts - 认证工具类
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  roles?: string[];
+}
 
-export const peridodicRefreshTokenCheck = (seconds = 60) => {
-  const interval = setInterval(() => {
-    if (isAuthenticated()) checkRefreshToken();
-  }, seconds * 1000);
-  return () => clearInterval(interval);
-};
+export interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  refresh_expires_in?: number;
+  user_info?: any;
+}
 
-const storeTokens = (data: any) => {
-  localStorage.setItem("access_token", data.access_token);
-  localStorage.setItem("access_expires", Date.now() / 1000 + data.expires_in);
-  localStorage.setItem("refresh_token", data.refresh_token);
-  localStorage.setItem(
-    "refresh_expires",
-    Date.now() / 1000 + data.refresh_expires_in
-  );
-};
+export interface OIDCLoginResponse {
+  auth_url: string;
+  state: string;
+}
 
-const clearTokens = () => {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("access_expires");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("refresh_expires");
-};
+class AuthService {
+  private baseUrl = 'http://localhost/api';
+  private tokenKey = 'access_token';
+  private refreshTokenKey = 'refresh_token';
+  private userKey = 'user_info';
 
-// OIDC登录相关函数
-export const startOIDCLogin = () => {
-  // 重定向到后端的OIDC登录端点
-  window.location.href = "/api/auth/oidc/login";
-};
-
-export const handleOIDCCallback = async (code: string) => {
-  try {
-    const response = await fetch(`/api/auth/oidc/callback?code=${code}`, {
-      method: "GET",
+  // 密码登录
+  async login(username: string, password: string): Promise<TokenResponse> {
+    const response = await fetch(`${this.baseUrl}/auth/token`, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json"
-      }
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        username,
+        password,
+        grant_type: 'password',
+      }),
     });
-    
-    if (response.status >= 400) {
-      const error = await response.json();
-      throw error.detail;
+
+    if (!response.ok) {
+      throw new Error('Login failed');
     }
-    
+
     const data = await response.json();
-    
-    // 存储token信息
-    storeTokens({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_in: data.expires_in,
-      refresh_expires_in: data.refresh_expires_in
-    });
-    
-    // 可选：存储用户信息
-    if (data.user_info) {
-      localStorage.setItem("user_info", JSON.stringify(data.user_info));
-    }
-    
+    this.setTokens(data);
     return data;
-  } catch (error) {
-    console.error("OIDC callback error:", error);
-    throw error;
   }
-};
 
-export const getOIDCUserInfo = async () => {
-  try {
-    const response = await fetch("/api/auth/oidc/user", {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
-        "Content-Type": "application/json"
-      }
-    });
+  // OIDC登录 - 获取授权URL
+  async oidcLogin(): Promise<OIDCLoginResponse> {
+    const response = await fetch(`${this.baseUrl}/auth/oidc/login`);
     
-    if (response.status >= 400) {
-      const error = await response.json();
-      throw error.detail;
+    if (!response.ok) {
+      throw new Error('OIDC login failed');
     }
-    
+
     return await response.json();
-  } catch (error) {
-    console.error("Get OIDC user info error:", error);
-    throw error;
   }
-};
 
-export const checkRefreshToken = async () => {
-  const refreshToken = localStorage.getItem("refresh_token");
-  const refreshExpires = localStorage.getItem("refresh_expires");
-  const now = Date.now() / 1000;
+  // OIDC回调处理
+  async oidcCallback(code: string, state: string): Promise<TokenResponse> {
+    const response = await fetch(`${this.baseUrl}/auth/oidc/callback?code=${code}&state=${state}`);
+    
+    if (!response.ok) {
+      throw new Error('OIDC callback failed');
+    }
 
-  if (refreshToken && refreshExpires) {
-    if (now > parseFloat(refreshExpires) - 180) {
-      clearTokens();
-      try {
-        const response = await fetch("/api/auth/refresh", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            token: refreshToken,
-          }),
-        });
-        if (response.status >= 400) {
-          const error = await response.json();
-          throw error.detail;
-        }
-        const data = await response.json();
-        storeTokens(data);
-      } catch (error) {
-        console.error(error);
-      }
+    const data = await response.json();
+    this.setTokens(data);
+    return data;
+  }
+
+  // 获取OIDC用户信息
+  async getOIDCUserInfo(): Promise<User> {
+    const token = this.getAccessToken();
+    if (!token) {
+      throw new Error('No access token');
+    }
+
+    const response = await fetch(`${this.baseUrl}/auth/oidc/user`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get user info');
+    }
+
+    return await response.json();
+  }
+
+  // 刷新token
+  async refreshToken(): Promise<TokenResponse> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
+      throw new Error('No refresh token');
+    }
+
+    const response = await fetch(`${this.baseUrl}/auth/oidc/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Token refresh failed');
+    }
+
+    const data = await response.json();
+    this.setTokens(data);
+    return data;
+  }
+
+  // OIDC登出
+  async oidcLogout(): Promise<void> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
+      return;
+    }
+
+    try {
+      await fetch(`${this.baseUrl}/auth/oidc/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      this.clearTokens();
     }
   }
-};
 
-export const checkAccessToken = async () => {
-  const accessToken = localStorage.getItem("access_token");
-  const refreshToken = localStorage.getItem("refresh_token");
-  const accessExpires = localStorage.getItem("access_expires");
-  const now = Date.now() / 1000;
-
-  if (accessToken && accessExpires) {
-    if (now > parseFloat(accessExpires) - 180) {
-      clearTokens();
+  // 传统登出
+  async logout(): Promise<void> {
+    const refreshToken = this.getRefreshToken();
+    if (refreshToken) {
       try {
-        const response = await fetch("/api/auth/refresh", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            token: refreshToken,
-          }),
+        await fetch(`${this.baseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: refreshToken }),
         });
-        if (response.status >= 400) {
-          const error = await response.json();
-          throw error.detail;
-        }
-        const data = await response.json();
-        storeTokens(data);
       } catch (error) {
-        console.error(error);
+        console.error('Logout error:', error);
       }
     }
-  }
-};
-
-export const getTokens = async (username: string, password: string) => {
-  const params = new URLSearchParams();
-  params.append("username", username);
-  params.append("password", password);
-  params.append("grant_type", "password");
-
-  const response = await fetch("/api/auth/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: params.toString()
-  });
-  if (response.status >= 400) {
-    const error = await response.json();
-    throw error.detail;
-  }
-  const data = await response.json();
-  storeTokens(data);
-};
-
-export const logout = async () => {
-  const refreshToken = localStorage.getItem("refresh_token");
-  clearTokens();
-
-  await fetch("/api/auth/logout", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token: refreshToken }),
-  });
-};
-
-export const authorized_fetch = async (
-  url: string,
-  headers: any,
-  options: any
-) => {
-  if (isAuthenticated()) {
-    await checkAccessToken();
-    const token = localStorage.getItem("access_token");
-    headers["Authorization"] = "Bearer " + token;
+    this.clearTokens();
   }
 
-  let response = await fetch(url, {
-    headers,
-    ...options,
-  });
-
-  response = await checkStatus(response);
-  return await response.json();
-};
-
-const checkStatus = async (response: Response) => {
-  if (response.status >= 200 && response.status < 300) {
-    return response;
-  } else {
-    const error = await response.json();
-    throw error.detail;
+  // 检查是否已登录
+  isAuthenticated(): boolean {
+    return !!this.getAccessToken();
   }
-};
+
+  // 获取当前用户
+  getCurrentUser(): User | null {
+    const userStr = localStorage.getItem(this.userKey);
+    return userStr ? JSON.parse(userStr) : null;
+  }
+
+  // 获取访问token
+  getAccessToken(): string | null {
+    return localStorage.getItem(this.tokenKey);
+  }
+
+  // 获取刷新token
+  getRefreshToken(): string | null {
+    return localStorage.getItem(this.refreshTokenKey);
+  }
+
+  // 设置tokens
+  private setTokens(data: TokenResponse): void {
+    if (data.access_token) {
+      localStorage.setItem(this.tokenKey, data.access_token);
+    }
+    if (data.refresh_token) {
+      localStorage.setItem(this.refreshTokenKey, data.refresh_token);
+    }
+    if (data.user_info) {
+      localStorage.setItem(this.userKey, JSON.stringify(data.user_info));
+    }
+  }
+
+  // 清除tokens
+  private clearTokens(): void {
+    localStorage.removeItem(this.tokenKey);
+    localStorage.removeItem(this.refreshTokenKey);
+    localStorage.removeItem(this.userKey);
+  }
+
+  // 检查token是否过期
+  isTokenExpired(): boolean {
+    const token = this.getAccessToken();
+    if (!token) return true;
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      return payload.exp < currentTime;
+    } catch {
+      return true;
+    }
+  }
+
+  // 自动刷新token
+  async ensureValidToken(): Promise<string | null> {
+    if (this.isTokenExpired()) {
+      try {
+        await this.refreshToken();
+      } catch {
+        this.clearTokens();
+        return null;
+      }
+    }
+    return this.getAccessToken();
+  }
+}
+
+export const authService = new AuthService();
+export default authService;

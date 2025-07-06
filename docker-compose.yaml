@@ -9,10 +9,26 @@ services:
       - ./logs/nginx:/var/log/nginx
     ports:
       - 80:80
+      - 81:81
+      - 8081:8081
     restart: unless-stopped
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      frontend2:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      backend2:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   backend:
     container_name: fastapi_sso_backend
@@ -30,8 +46,43 @@ services:
       - 8888:8888
     restart: unless-stopped
     depends_on:
-      - postgres
-      - keycloak
+      postgres:
+        condition: service_healthy
+      # keycloak:
+      #   condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  backend2:
+    container_name: fastapi_sso_backend2
+    build:
+      context: backend2
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_USER}
+    volumes:
+      - ./logs/backend2:/logs
+    ports:
+      - 8889:8889
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # keycloak:
+      #   condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8889/api2"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   frontend:
     container_name: fastapi_sso_frontend
@@ -44,11 +95,36 @@ services:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend2:
+    container_name: fastapi_sso_frontend2
+    build:
+      context: frontend2
+      dockerfile: Dockerfile
+    ports:
+      - 8001:8001
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   keycloak:
     container_name: fastapi_sso_keycloak
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/quay.io/keycloak/keycloak:25.0
-    command: start-dev
+    command:
+      - start-dev
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak_postgres:5432/${KEYCLOAK_DB_DATABASE}
@@ -57,10 +133,18 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     ports:
+      - 9000:9000
       - 8080:8080
     restart: unless-stopped
     depends_on:
-      - keycloak_postgres
+      keycloak_postgres:
+        condition: service_healthy
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 5
+    #   start_period: 120s
 
   postgres:
     container_name: fastapi_sso_postgres
@@ -73,6 +157,12 @@ services:
       - 5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   keycloak_postgres:
     container_name: fastapi_sso_keycloak_postgres
@@ -84,6 +174,12 @@ services:
       POSTGRES_DB: ${KEYCLOAK_DB_DATABASE}
       POSTGRES_USER: ${KEYCLOAK_DB_USER}
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER} -d ${KEYCLOAK_DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:

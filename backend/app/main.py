@@ -5,13 +5,16 @@ from fastapi.responses import Response
 from simber import Logger
 import uvicorn
 import os
+import secrets
+from urllib.parse import urlencode
 
 from app.router import auth, targets
-from app.service.keycloak import verify_token
-from app.service.keycloak import verify_permission
+from app.service.keycloak import (
+    verify_token, verify_permission, get_user_info, refresh_token as oidc_refresh_token, logout as oidc_logout
+)
 
 
-from fastapi_keycloak import FastAPIKeycloak, OIDCUser
+# 移除FastAPIKeycloak依赖，直接使用python-keycloak
 
 
 LOG_FORMAT = "{levelname} [{filename}:{lineno}]:"
@@ -32,82 +35,88 @@ app.add_middleware(
 )
 
 # OIDC配置 - 延迟初始化
-idp = None
-OIDC_ENABLED = False
+# idp = None
+# OIDC_ENABLED = False
 
-def _init_oidc():
-    """初始化OIDC配置"""
-    global idp, OIDC_ENABLED
-    try:
-        idp = FastAPIKeycloak(
-            server_url=os.environ.get("KEYCLOAK_SERVER_URL", "http://keycloak:8080"),
-            client_id=os.environ.get("KEYCLOAK_CLIENT_ID", "fastapi-client"),
-            client_secret=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY", "your-client-secret"),
-            # 暂时注释掉admin_client_secret，避免service account错误
-            # admin_client_secret=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY", "your-client-secret"),
-            realm=os.environ.get("KEYCLOAK_REALM_NAME", "master"),
-            callback_uri="http://localhost/oidc/callback"  # 前端OIDC回调URL
-        )
-        # 添加OIDC路由到Swagger文档
-        idp.add_swagger_config(app)
-        OIDC_ENABLED = True
-        logger.info("OIDC configuration loaded successfully")
-        return True
-    except Exception as e:
-        logger.warning(f"OIDC configuration failed: {e}. OIDC features will be disabled.")
-        idp = None
-        OIDC_ENABLED = False
-        return False
+# def _init_oidc():
+#     ...
+# def _ensure_oidc_initialized():
+#     ...
 
-def _ensure_oidc_initialized():
-    """确保OIDC已初始化"""
-    if idp is None:
-        if not _init_oidc():
-            raise HTTPException(status_code=503, detail="OIDC is not configured")
-
-# 添加OIDC登录路由
 @app.get("/api/auth/oidc/login")
 async def oidc_login():
     """重定向到Keycloak登录页面"""
-    _ensure_oidc_initialized()
-    return idp.login_uri()
+    # 生成随机state参数
+    state = secrets.token_urlsafe(32)
+    # 构建OIDC授权URL
+    auth_url = f"{os.environ.get('KEYCLOAK_SERVER_URL_CLIENT', 'http://localhost:8080/')}/realms/{os.environ.get('KEYCLOAK_REALM_NAME', 'master')}/protocol/openid-connect/auth"
+    params = {
+        'client_id': os.environ.get('KEYCLOAK_CLIENT_ID', 'fastapi-client'),
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'redirect_uri': 'http://localhost/oidc/callback',
+        'state': state
+    }
+    auth_url_with_params = f"{auth_url}?{urlencode(params)}"
+    return {"auth_url": auth_url_with_params, "state": state}
 
-# 添加OIDC回调路由
 @app.get("/api/auth/oidc/callback")
-async def oidc_callback(code: str):
+async def oidc_callback(code: str, state: str = None):
     """处理OIDC回调"""
-    _ensure_oidc_initialized()
-    
     try:
-        user = idp.exchange_authorization_code(session_code=code)
+        # 使用keycloak.py暴露的authenticate_user方法换token
+        from app.service.keycloak import keycloak_openid
+        token_data = keycloak_openid.token(
+            grant_type='authorization_code',
+            code=code,
+            redirect_uri='http://localhost/oidc/callback'
+        )
+        user_info = keycloak_openid.userinfo(token_data['access_token'])
         return {
-            "access_token": user.access_token,
-            "refresh_token": user.refresh_token,
-            "expires_in": user.expires_in,
-            "refresh_expires_in": user.refresh_expires_in,
-            "user_info": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "roles": user.roles
-            }
+            "access_token": token_data['access_token'],
+            "refresh_token": token_data.get('refresh_token'),
+            "expires_in": token_data.get('expires_in', 300),
+            "refresh_expires_in": token_data.get('refresh_expires_in', 1800),
+            "user_info": user_info
         }
     except Exception as e:
         logger.error(f"OIDC callback error: {e}")
         raise HTTPException(status_code=400, detail="OIDC authentication failed")
 
-# 添加OIDC用户信息路由
 @app.get("/api/auth/oidc/user")
-async def oidc_user_info():
+async def oidc_user_info(token: str = Depends(verify_token)):
     """获取当前OIDC用户信息"""
-    _ensure_oidc_initialized()
-    
-    # 这里需要从请求中获取token，然后验证用户
-    # 简化处理，直接返回错误信息
-    raise HTTPException(status_code=501, detail="OIDC user info endpoint not fully implemented")
+    try:
+        user_info = get_user_info(token)
+        return user_info
+    except Exception as e:
+        logger.error(f"OIDC user info error: {e}")
+        raise HTTPException(status_code=400, detail="Failed to get user info")
 
+@app.post("/api/auth/oidc/refresh")
+async def oidc_refresh_token(refresh_token: str):
+    """刷新OIDC token"""
+    try:
+        token_data = oidc_refresh_token(refresh_token)
+        return {
+            "access_token": token_data['access_token'],
+            "refresh_token": token_data.get('refresh_token'),
+            "expires_in": token_data.get('expires_in', 300),
+            "refresh_expires_in": token_data.get('refresh_expires_in', 1800)
+        }
+    except Exception as e:
+        logger.error(f"OIDC refresh error: {e}")
+        raise HTTPException(status_code=400, detail="Token refresh failed")
+
+@app.post("/api/auth/oidc/logout")
+async def oidc_logout_route(refresh_token: str):
+    """OIDC登出"""
+    try:
+        oidc_logout(refresh_token)
+        return {"message": "Logout successful"}
+    except Exception as e:
+        logger.error(f"OIDC logout error: {e}")
+        raise HTTPException(status_code=400, detail="Logout failed")
 
 @app.exception_handler(Exception)
 async def exception_handler(_: Request, exc: Exception) -> Response:
