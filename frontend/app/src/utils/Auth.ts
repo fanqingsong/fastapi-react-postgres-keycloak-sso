@@ -26,6 +26,70 @@ const clearTokens = () => {
   localStorage.removeItem("refresh_expires");
 };
 
+// OIDC登录相关函数
+export const startOIDCLogin = () => {
+  // 重定向到后端的OIDC登录端点
+  window.location.href = "/api/auth/oidc/login";
+};
+
+export const handleOIDCCallback = async (code: string) => {
+  try {
+    const response = await fetch(`/api/auth/oidc/callback?code=${code}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    
+    if (response.status >= 400) {
+      const error = await response.json();
+      throw error.detail;
+    }
+    
+    const data = await response.json();
+    
+    // 存储token信息
+    storeTokens({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_in: data.expires_in,
+      refresh_expires_in: data.refresh_expires_in
+    });
+    
+    // 可选：存储用户信息
+    if (data.user_info) {
+      localStorage.setItem("user_info", JSON.stringify(data.user_info));
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("OIDC callback error:", error);
+    throw error;
+  }
+};
+
+export const getOIDCUserInfo = async () => {
+  try {
+    const response = await fetch("/api/auth/oidc/user", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+        "Content-Type": "application/json"
+      }
+    });
+    
+    if (response.status >= 400) {
+      const error = await response.json();
+      throw error.detail;
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Get OIDC user info error:", error);
+    throw error;
+  }
+};
+
 export const checkRefreshToken = async () => {
   const refreshToken = localStorage.getItem("refresh_token");
   const refreshExpires = localStorage.getItem("refresh_expires");

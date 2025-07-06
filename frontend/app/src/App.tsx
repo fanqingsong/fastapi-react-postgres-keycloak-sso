@@ -2,6 +2,7 @@ import React, { createContext, FC, useState } from "react";
 import { BrowserRouter, Redirect, Route, Switch } from "react-router-dom";
 
 import { Home, NavigationBar, Login } from "./components/public";
+import { OIDCCallback } from "./components/public/OIDCCallback";
 import { TargetInfo, TargetSearch, TargetCreate } from "./components/private";
 import { PrivateRoute } from "./PrivateRoute";
 import { isAuthenticated, peridodicRefreshTokenCheck } from "./utils/Auth";
@@ -25,6 +26,7 @@ export const App: FC = () => {
         <Switch>
           <Route exact path="/" component={Home} />
           <Route exact path="/login" component={Login} />
+          <Route exact path="/oidc/callback" component={OIDCCallback} />
           <PrivateRoute exact path="/targets" component={TargetSearch} />
           <PrivateRoute exact path="/targets/create" component={TargetCreate} />
           <PrivateRoute path="/targets/:id" component={TargetInfo} />

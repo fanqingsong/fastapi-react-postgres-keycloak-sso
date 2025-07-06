@@ -1,5 +1,5 @@
 """Main module."""
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from simber import Logger
@@ -31,20 +31,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# idp = FastAPIKeycloak(
-#     # server_url=os.environ.get("KEYCLOAK_SERVER_URL"),
-#     server_url="http://keycloak:8080/auth",
-#     client_id=os.environ.get("KEYCLOAK_CLIENT_ID"),
-#     client_secret=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY"),
-#     admin_client_secret="065a7a30-9019-4718-a017-697835cf5a20",
-#     realm=os.environ.get("KEYCLOAK_REALM_NAME"),
-#     callback_uri="http://localhost:8888/callback"
-# )
+# OIDC配置 - 回调URL暂时为空，后续添加
+idp = FastAPIKeycloak(
+    server_url=os.environ.get("KEYCLOAK_SERVER_URL", "http://keycloak:8080"),
+    client_id=os.environ.get("KEYCLOAK_CLIENT_ID", "fastapi-client"),
+    client_secret=os.environ.get("KEYCLOAK_CLIENT_SECRET_KEY", "your-client-secret"),
+    admin_client_secret=os.environ.get("KEYCLOAK_ADMIN_CLIENT_SECRET", "your-admin-secret"),
+    realm=os.environ.get("KEYCLOAK_REALM_NAME", "master"),
+    callback_uri="http://localhost/oidc/callback"  # 前端OIDC回调URL
+)
 
-# idp.add_swagger_config(app)
+# 添加OIDC路由到Swagger文档
+idp.add_swagger_config(app)
 
+# 添加OIDC登录路由
+@app.get("/api/auth/oidc/login")
+async def oidc_login():
+    """重定向到Keycloak登录页面"""
+    return idp.login_uri()
 
+# 添加OIDC回调路由
+@app.get("/api/auth/oidc/callback")
+async def oidc_callback(code: str):
+    """处理OIDC回调"""
+    try:
+        user = idp.exchange_authorization_code(session_code=code)
+        return {
+            "access_token": user.access_token,
+            "refresh_token": user.refresh_token,
+            "expires_in": user.expires_in,
+            "refresh_expires_in": user.refresh_expires_in,
+            "user_info": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "roles": user.roles
+            }
+        }
+    except Exception as e:
+        logger.error(f"OIDC callback error: {e}")
+        raise HTTPException(status_code=400, detail="OIDC authentication failed")
 
+# 添加OIDC用户信息路由
+@app.get("/api/auth/oidc/user")
+async def oidc_user_info(user: OIDCUser = Depends(idp.get_current_user())):
+    """获取当前OIDC用户信息"""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "roles": user.roles
+    }
 
 
 @app.exception_handler(Exception)

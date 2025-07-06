@@ -11,7 +11,7 @@ import {
 import { useHistory } from "react-router";
 
 import { AuthContext } from "../../App";
-import { getTokens } from "../../utils/Auth";
+import { getTokens, startOIDCLogin } from "../../utils/Auth";
 
 export const Login = (props: any) => {
   const from = props.location.state?.from.pathname;
@@ -42,6 +42,11 @@ export const Login = (props: any) => {
     }
   };
 
+  const handleOIDCLogin = (e: React.MouseEvent) => {
+    e.preventDefault();
+    startOIDCLogin();
+  };
+
   return (
     <Container>
       <Row>
@@ -66,8 +71,11 @@ export const Login = (props: any) => {
                 />
               </Form.Group>
               {error && <Alert variant="warning">{error}</Alert>}
-              <Button disabled={disabled} onClick={handleClick} type="submit">
-                Login
+              <Button disabled={disabled} onClick={handleClick} type="submit" className="mr-2">
+                Login with Password
+              </Button>
+              <Button variant="primary" onClick={handleOIDCLogin} type="button">
+                Login with SSO (OIDC)
               </Button>
             </Form>
           </Jumbotron>
