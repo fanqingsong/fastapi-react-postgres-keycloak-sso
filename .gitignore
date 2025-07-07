@@ -7,3 +7,10 @@ app/node_modules
 
 *.log
 frontend_legacy
+
+# Certificate files
+nginx/certs/*.pem
+nginx/certs/*.key
+*.pem
+*.key
+*.crt
